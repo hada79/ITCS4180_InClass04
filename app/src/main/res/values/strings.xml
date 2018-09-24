@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">InClass04</string>
+    <string name="searchHint_str">Search Keyword</string>
+    <string name="searchBtn_str">Go</string>
 </resources>
