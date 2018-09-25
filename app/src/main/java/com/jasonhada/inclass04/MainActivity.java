@@ -1,16 +1,23 @@
 package com.jasonhada.inclass04;
 
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.support.v4.widget.CircularProgressDrawable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -22,12 +29,12 @@ import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
     ArrayList<String> urls;
+    String[] keywords;
     int index = 0;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
 
         ImageButton prev_btn = (ImageButton) findViewById(R.id.prev_btn);
         ImageButton next_btn = (ImageButton) findViewById(R.id.next_btn);
@@ -64,11 +71,94 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        if (isConnected()){
+            new GetKeywordsAsync().execute();
 
-        // This goes after alert dialog
-        RequestParams params = new RequestParams();
-        params.addParameter("keyword", "android");
-        new GetUrlsAsync(params).execute("http://dev.theappsdr.com/apis/photos/index.php");
+            findViewById(R.id.search_btn).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    AlertDialog.Builder alert = new AlertDialog.Builder(MainActivity.this);
+                    alert.setTitle("Choose a Keyword").setItems(keywords, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            EditText keyword = findViewById(R.id.search_et);
+                            keyword.setText(keywords[which]);
+
+                            // This goes after alert dialog
+                            RequestParams params = new RequestParams();
+                            params.addParameter("keyword", keywords[which]);
+                            new GetUrlsAsync(params).execute("http://dev.theappsdr.com/apis/photos/index.php");
+                        }
+                    });
+                    alert.create();
+                    alert.show();
+                }
+            });
+        }else{
+            Toast.makeText(MainActivity.this, "Disconnected", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean isConnected(){
+        ConnectivityManager connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+
+        if(networkInfo == null || !networkInfo.isConnected()){
+            return false;
+        }
+
+        return true;
+    }
+
+    private class GetKeywordsAsync extends AsyncTask<Void, Void, String>{
+        @Override
+        protected String doInBackground(Void... params) {
+            StringBuilder stringBuilder = new StringBuilder();
+            HttpURLConnection connection = null;
+            BufferedReader reader = null;
+            String result = null;
+
+            try {
+                URL url = new URL("http://dev.theappsdr.com/apis/photos/keywords.php");
+                connection = (HttpURLConnection) url.openConnection();
+                connection.connect();
+                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                    reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                    String line = "";
+                    while ((line = reader.readLine()) != null) {
+                        stringBuilder.append(line);
+                    }
+                    result = stringBuilder.toString();
+                }
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                if(connection != null){
+                    connection.disconnect();
+                }
+
+                if (reader != null){
+                    try {
+                        reader.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            if (s != null){
+                keywords = s.split(";");
+            }else{
+                Toast.makeText(MainActivity.this, "No keywords found", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     private class GetUrlsAsync extends AsyncTask<String, Void, ArrayList<String>> {
@@ -96,8 +186,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                return result;
-
             } catch (MalformedURLException e) {
                 e.printStackTrace();
             } catch (IOException e) {
@@ -114,22 +202,23 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
-            return null;
+            return result;
         }
 
         // Runs on main thread
 
         @Override
         protected void onPostExecute(ArrayList<String> apiUrls) {
-            if(apiUrls != null) {
+            if(apiUrls != null && apiUrls.size() != 0) {
                 urls = apiUrls;
+                Log.d("demo", "index is " + index + " urls size is " + urls.size());
                 new GetPhotoAsync().execute(urls.get(index));
                 if(apiUrls.size() > 1){
                     findViewById(R.id.next_btn).setVisibility(View.VISIBLE);
                     findViewById(R.id.prev_btn).setVisibility(View.VISIBLE);
                 }
             } else {
-                Log.d("demo", "No images found");
+                Toast.makeText(MainActivity.this, "No images found", Toast.LENGTH_SHORT).show();
             }
             super.onPostExecute(apiUrls);
         }
